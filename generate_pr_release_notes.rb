@@ -11,7 +11,7 @@
 #   ANTHROPIC_API_KEY  - Anthropic API key for Claude
 #
 # Optional environment variables:
-#   GITHUB_TOKEN       - GitHub token for fetching PR details
+#   GH_ACCESS_TOKEN    - GitHub token for fetching PR details
 #   JIRA_BASE_URL      - Jira instance URL
 #   JIRA_CLOUD_ID      - Atlassian Cloud ID
 #   JIRA_EMAIL         - Atlassian account email
@@ -40,7 +40,7 @@ class PRReleaseNotesGenerator
     @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
     @anthropic_model = ENV["ANTHROPIC_MODEL"] || "claude-haiku-4-5"
 
-    @github_token = ENV["GITHUB_TOKEN"]
+    @github_token = ENV["GH_ACCESS_TOKEN"]
     @github_repo = extract_github_repo
 
     @jira_base_url = ENV["JIRA_BASE_URL"]

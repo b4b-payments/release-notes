@@ -38,7 +38,7 @@ class DeploymentSummaryGenerator
     @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
     @anthropic_model = ENV["ANTHROPIC_MODEL"] || "claude-haiku-4-5"
     @confluence_base_url = ENV["CONFLUENCE_BASE_URL"]
-    @github_access_token = ENV["GITHUB_ACCESS_TOKEN"]
+    @github_access_token = ENV["GH_ACCESS_TOKEN"]
     @file_changes_cache = nil
     @github_repo = nil
 

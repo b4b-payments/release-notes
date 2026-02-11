@@ -67,9 +67,8 @@ Helper class for Confluence API interactions. Used by `generate_release_notes.rb
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub token for fetching PR details | — |
+| `GH_ACCESS_TOKEN` | GitHub token for fetching PR details | — |
 | `ANTHROPIC_MODEL` | Claude model to use | `claude-haiku-4-5` |
-| `GITHUB_ACCESS_TOKEN` | GitHub token (deployment notes) | — |
 
 ## GitHub Actions Integration
 
