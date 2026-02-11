@@ -1,0 +1,42 @@
+# PCS Core Deployment Summary Configuration
+# This YAML should be placed in a Confluence code block on your configuration page
+# The script will fetch this dynamically to generate release notes
+
+# Global configuration
+config:
+  max_tokens_default: 1000
+  max_words_target: 200
+  output_format: markdown
+
+# Section configurations
+sections:
+  - key: executive_summary
+    index: "01"
+    title: "Executive Summary"
+    max_tokens: 1200
+    prompt: |
+      Summarise the deployment in 2-3 sentences covering: scope, overall risk level (Low/Medium/High), key concerns.
+
+      Deployment: {{compare_ref}} → {{base_ref}}
+      Changes: {{commit_count}} commits, {{jira_count}} tickets
+
+      {{jira_summary}}
+
+      Be direct about risks. No code/SQL. British English.
+      WORD LIMIT: 200 words maximum
+
+  - key: change_classification
+    index: "02"
+    title: "Change Classification"
+    max_tokens: 1200
+    prompt: |
+      Classify as: STANDARD (routine) | MAJOR (security/auth/payment/third-party) | EMERGENCY (incident/failure)
+
+      State classification + reason (2 sentences max).
+      If MAJOR, list specific triggers.
+
+      {{jira_summary}}
+
+      No code/SQL. British English.
+      WORD LIMIT: 180 words maximum
+
