@@ -1,0 +1,259 @@
+# Release Notes Generation & Approval Workflow
+#
+# Slash commands (comment on a PR):
+#   /release-notes-generate  - Generate release notes and post as PR comment
+#   /release-notes-approve   - Approve release notes (unblocks merge)
+#   /release-notes-revoke    - Revoke approval (re-blocks merge)
+#
+# Setup required:
+#   1. Add these secrets to the repository:
+#      - ANTHROPIC_API_KEY (required)
+#      - JIRA_BASE_URL, JIRA_CLOUD_ID, JIRA_EMAIL, ATLASSIAN_API_TOKEN (optional, for Jira enrichment)
+#   2. Add branch protection rule on main:
+#      - Require status checks to pass: "release-notes-approved"
+#
+name: Release Notes
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  generate:
+    name: Generate Release Notes
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/release-notes-generate')
+    runs-on: ubuntu-latest
+    steps:
+      - name: React to comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes'
+            });
+
+      - name: Get PR details
+        id: pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('head_sha', pr.data.head.sha);
+            core.setOutput('head_ref', pr.data.head.ref);
+            core.setOutput('base_ref', pr.data.base.ref);
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch PR head
+        run: git fetch origin pull/${{ github.event.issue.number }}/head:pr_head
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Generate release notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_CLOUD_ID: ${{ secrets.JIRA_CLOUD_ID }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+        run: |
+          ruby generate_pr_release_notes.rb \
+            --pr ${{ github.event.issue.number }} \
+            --base "origin/${{ steps.pr.outputs.base_ref }}" \
+            --head pr_head \
+            --verbose \
+            > release_notes_output.md
+
+      - name: Post release notes comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const notes = fs.readFileSync('release_notes_output.md', 'utf8');
+            const sha = '${{ steps.pr.outputs.head_sha }}';
+            const body = `<!-- release-notes-sha:${sha} -->\n${notes}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Set pending commit status
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ steps.pr.outputs.head_sha }}',
+              state: 'pending',
+              context: 'release-notes-approved',
+              description: 'Release notes pending approval. Comment /release-notes-approve to approve.'
+            });
+
+      - name: React with success
+        if: success()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `**Release Notes Generation Failed**\n\nCheck the [workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
+            });
+
+  approve:
+    name: Approve Release Notes
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/release-notes-approve')
+    runs-on: ubuntu-latest
+    steps:
+      - name: React to comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '+1'
+            });
+
+      - name: Get PR head SHA
+        id: pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('head_sha', pr.data.head.sha);
+
+      - name: Validate release notes are current
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100
+              }
+            );
+
+            const releaseNotesComments = comments
+              .filter(c => c.body.includes('release-notes-sha:'))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            if (releaseNotesComments.length === 0) {
+              core.setFailed('No release notes found. Run /release-notes-generate first.');
+              return;
+            }
+
+            const latestComment = releaseNotesComments[0];
+            const match = latestComment.body.match(/release-notes-sha:([a-f0-9]+)/);
+            const notesSha = match ? match[1] : null;
+            const currentSha = '${{ steps.pr.outputs.head_sha }}';
+
+            if (notesSha !== currentSha) {
+              core.setFailed(
+                `Release notes are stale (generated at ${notesSha.substring(0, 8)}). ` +
+                `PR is now at ${currentSha.substring(0, 8)}. Run /release-notes-generate again.`
+              );
+            }
+
+      - name: Set success commit status
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ steps.pr.outputs.head_sha }}',
+              state: 'success',
+              context: 'release-notes-approved',
+              description: 'Release notes approved'
+            });
+
+  revoke:
+    name: Revoke Release Notes Approval
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/release-notes-revoke')
+    runs-on: ubuntu-latest
+    steps:
+      - name: React to comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes'
+            });
+
+      - name: Get PR head SHA
+        id: pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('head_sha', pr.data.head.sha);
+
+      - name: Set pending commit status
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ steps.pr.outputs.head_sha }}',
+              state: 'pending',
+              context: 'release-notes-approved',
+              description: 'Release notes approval revoked. Comment /release-notes-approve to re-approve.'
+            });
