@@ -8,15 +8,16 @@
 #   ruby generate_pr_release_notes.rb --pr 123 --base origin/main --head pr_head [--verbose]
 #
 # Required environment variables:
-#   RN_ANTHROPIC_API_KEY  - Anthropic API key for Claude
+#   RN_ANTHROPIC_API_KEY       - Anthropic API key for Claude
+#   RN_CONFLUENCE_BASE_URL     - Confluence instance URL
+#   RN_ATLASSIAN_API_TOKEN     - Atlassian API token (for Confluence)
+#   RN_JIRA_EMAIL              - Atlassian account email
 #
 # Optional environment variables:
-#   RN_GH_ACCESS_TOKEN    - GitHub token for fetching PR details
-#   RN_JIRA_BASE_URL      - Jira instance URL
-#   RN_JIRA_CLOUD_ID      - Atlassian Cloud ID
-#   RN_JIRA_EMAIL         - Atlassian account email
-#   RN_ATLASSIAN_API_TOKEN - Atlassian API token
-#   RN_ANTHROPIC_MODEL    - Claude model (default: claude-haiku-4-5)
+#   RN_GH_ACCESS_TOKEN         - GitHub token for fetching PR details
+#   RN_JIRA_BASE_URL           - Jira instance URL
+#   RN_JIRA_CLOUD_ID           - Atlassian Cloud ID
+#   RN_ANTHROPIC_MODEL         - Claude model (default: claude-haiku-4-5)
 
 require 'json'
 require 'net/http'
@@ -25,10 +26,12 @@ require 'base64'
 require 'optparse'
 require 'time'
 require 'open3'
+require_relative "confluence_client"
 
 class PRReleaseNotesGenerator
   JIRA_PATTERN = /\b([A-Z]+-\d+)\b/
   GIT_REF_PATTERN = %r{\A[\w\-./]+\z}
+  PROMPT_CONFIG_PAGE_ID = "3230269452"
 
   def initialize(options = {})
     @pr_number = options[:pr_number]
@@ -46,8 +49,10 @@ class PRReleaseNotesGenerator
     @jira_cloud_id = ENV["RN_JIRA_CLOUD_ID"]
     @jira_email = ENV["RN_JIRA_EMAIL"]
     @atlassian_api_token = ENV["RN_ATLASSIAN_API_TOKEN"]
+    @confluence_base_url = ENV["RN_CONFLUENCE_BASE_URL"]
 
     validate!
+    load_confluence_config!
   end
 
   def generate
@@ -86,7 +91,10 @@ class PRReleaseNotesGenerator
     errors << "PR number must be a positive integer" if @pr_number && @pr_number <= 0
     errors << "Base ref is required (--base)" unless @base_ref
     errors << "Head ref is required (--head)" unless @head_ref
-    errors << "ANTHROPIC_API_KEY environment variable is required" unless @anthropic_api_key
+    errors << "RN_ANTHROPIC_API_KEY environment variable is required" unless @anthropic_api_key
+    errors << "RN_CONFLUENCE_BASE_URL environment variable is required" unless @confluence_base_url
+    errors << "RN_ATLASSIAN_API_TOKEN environment variable is required" unless @atlassian_api_token
+    errors << "RN_JIRA_EMAIL environment variable is required" unless @jira_email
 
     if @base_ref && !@base_ref.match?(GIT_REF_PATTERN)
       errors << "Base ref contains invalid characters: #{@base_ref}"
@@ -100,6 +108,22 @@ class PRReleaseNotesGenerator
       errors.each { |e| warn("[ERROR] #{e}") }
       exit(1)
     end
+  end
+
+  def load_confluence_config!
+    log("Loading prompt configuration from Confluence...")
+
+    @confluence_client = ConfluenceClient.new(
+      base_url: @confluence_base_url,
+      api_token: @atlassian_api_token,
+      email: @jira_email
+    )
+
+    @confluence_config = @confluence_client.fetch_config_from_page(PROMPT_CONFIG_PAGE_ID, format: :yaml)
+    log("  Successfully loaded Confluence config with #{@confluence_config["sections"]&.length || 0} sections")
+  rescue => e
+    warn("[ERROR] Failed to load Confluence configuration: #{e.message}")
+    exit(1)
   end
 
   def extract_github_repo
@@ -266,32 +290,90 @@ class PRReleaseNotesGenerator
   end
 
   def build_context(pr_details, commits, file_changes, jira_ticket_ids, jira_details)
+    {
+      metadata: {
+        pr_number: @pr_number,
+        pr_title: pr_details&.[](:title) || "N/A",
+        pr_author: pr_details&.[](:author) || "N/A",
+        pr_branch: pr_details&.[](:branch) || @head_ref,
+        base_branch: pr_details&.[](:base_branch) || @base_ref,
+        commit_count: commits.length,
+        jira_ticket_count: jira_ticket_ids.length,
+        files_changed: file_changes[:total_files],
+        generated_at: Time.now.iso8601,
+      },
+      pr_details: pr_details || {},
+      commits: commits,
+      file_changes: file_changes,
+      jira_ticket_ids: jira_ticket_ids,
+      jira_details: jira_details,
+    }
+  end
+
+  def build_pr_context_string(context)
     <<~CONTEXT
       # Pull Request Context
 
-      ## PR Details
-      - PR Number: ##{@pr_number}
-      - Title: #{pr_details&.[](:title) || "N/A"}
-      - Author: #{pr_details&.[](:author) || "N/A"}
-      - Branch: #{pr_details&.[](:branch) || @head_ref}
-      - Base: #{pr_details&.[](:base_branch) || @base_ref}
-      - Labels: #{pr_details&.[](:labels)&.join(", ").then { |l| l&.empty? ? "None" : l } || "None"}
+      **PR Details:**
+      - PR Number: ##{context[:metadata][:pr_number]}
+      - Title: #{context[:metadata][:pr_title]}
+      - Author: #{context[:metadata][:pr_author]}
+      - Branch: #{context[:metadata][:pr_branch]} → #{context[:metadata][:base_branch]}
+      - Commits: #{context[:metadata][:commit_count]}
+      - Jira Tickets: #{context[:metadata][:jira_ticket_count]}
+      - Files Changed: #{context[:metadata][:files_changed]}
+      - Generated: #{context[:metadata][:generated_at]}
 
       ## PR Description
-      #{pr_details&.[](:description) || "No description provided."}
 
-      ## Commits (#{commits.length})
-      #{commits.map { |c| "- `#{c[:short_hash]}` #{c[:subject]} (#{c[:author]})" }.join("\n")}
+      #{context[:pr_details]&.[](:description) || "No description provided."}
 
-      ## File Changes (#{file_changes[:total_files]} files)
-      #{file_changes[:stats]}
+      ## Commits
 
-      ## Files by Category
-      #{format_file_categories(file_changes[:categorized])}
+      #{format_commits_for_prompt(context[:commits])}
 
-      ## Jira Tickets
-      #{format_jira_context(jira_ticket_ids, jira_details)}
+      ## File Changes Summary
+
+      #{context[:file_changes][:stats]}
+
+      ## Changed Files by Category
+
+      #{format_file_categories(context[:file_changes][:categorized])}
+
+      ## Associated Jira Tickets
+
+      #{format_jira_for_prompt(context[:jira_details])}
+
+      ---
     CONTEXT
+  end
+
+  def format_commits_for_prompt(commits)
+    if commits.empty?
+      return "No commits found in this PR."
+    end
+
+    commits.map do |c|
+      body_preview = c[:body].empty? ? "" : "\n  #{c[:body].lines.first&.strip}"
+      "- `#{c[:short_hash]}` **#{c[:subject]}**#{body_preview}\n  _#{c[:author]} (#{c[:date]})_"
+    end.join("\n\n")
+  end
+
+  def format_jira_for_prompt(jira_details)
+    if jira_details.empty?
+      return "No Jira tickets referenced in this PR."
+    end
+
+    jira_details.map do |ticket|
+      if ticket[:error]
+        "- **#{ticket[:key]}**: [!] Could not fetch details (#{ticket[:error]})"
+      else
+        <<~TICKET.strip
+          - **#{ticket[:key]}**: #{ticket[:summary]}
+            - Type: #{ticket[:type]} | Status: #{ticket[:status]} | Priority: #{ticket[:priority]}
+        TICKET
+      end
+    end.join("\n\n")
   end
 
   def format_file_categories(categorized)
@@ -319,43 +401,41 @@ class PRReleaseNotesGenerator
   end
 
   def generate_release_notes(context)
-    prompt = <<~PROMPT
-      #{context}
+    # Get the first section from Confluence config as the template
+    sections = @confluence_config["sections"] || []
 
-      ---
+    if sections.empty?
+      warn("[ERROR] No sections found in Confluence configuration")
+      exit(1)
+    end
 
-      Based on the pull request context above, generate concise release notes for this PR.
-      The release notes will be posted as a comment on the pull request for review and approval before merging.
+    prompt_template = sections.first["prompt"]
+    max_tokens = sections.first["max_tokens"] || 2000
 
-      Format your response as markdown with these sections:
+    unless prompt_template
+      warn("[ERROR] First section in Confluence config is missing prompt template")
+      exit(1)
+    end
 
-      ### Summary
-      A 1-3 sentence overview of what this PR does and why.
+    prompt = build_prompt_from_template(prompt_template, context)
+    call_llm(prompt, max_tokens)
+  end
 
-      ### Changes
-      A bulleted list of the key changes, grouped logically. Focus on what changed from a user/system perspective, not individual file changes. Be specific but concise.
+  def build_prompt_from_template(template, context)
+    # Build comprehensive context to include with the prompt
+    full_context = build_pr_context_string(context)
 
-      ### Risk Assessment
-      Rate as **LOW** / **MEDIUM** / **HIGH** with a brief explanation. Consider:
-      - Database migrations
-      - API changes
-      - Configuration changes
-      - External service integrations
-      - Scope of code changes
+    # Template gets full context prepended, then any variable substitutions
+    prompt = full_context + "\n\n" + template
 
-      ### Jira Tickets
-      List any referenced Jira tickets with their summary (if available).
+    # Replace common placeholders
+    prompt.gsub!("{{commit_count}}", context[:metadata][:commit_count].to_s)
+    prompt.gsub!("{{jira_count}}", context[:metadata][:jira_ticket_count].to_s)
+    prompt.gsub!("{{pr_number}}", context[:metadata][:pr_number].to_s)
+    prompt.gsub!("{{pr_title}}", context[:metadata][:pr_title])
+    prompt.gsub!("{{files_changed}}", context[:metadata][:files_changed].to_s)
 
-      Guidelines:
-      - Write for a technical audience (developers, QA, release managers)
-      - Be factual and specific; avoid vague statements
-      - Highlight any breaking changes, new dependencies, or required configuration
-      - If there are database migrations, mention them explicitly
-      - Keep the total response under 500 words
-      - Output ONLY the release notes content in markdown, no preamble or wrapping
-    PROMPT
-
-    call_llm(prompt, 2000)
+    prompt
   end
 
   def call_llm(prompt, max_tokens = 1000)
