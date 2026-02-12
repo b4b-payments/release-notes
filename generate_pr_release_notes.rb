@@ -8,28 +8,27 @@
 #   ruby generate_pr_release_notes.rb --pr 123 --base origin/main --head pr_head [--verbose]
 #
 # Required environment variables:
-#   ANTHROPIC_API_KEY  - Anthropic API key for Claude
+#   RN_ANTHROPIC_API_KEY  - Anthropic API key for Claude
 #
 # Optional environment variables:
-#   GH_ACCESS_TOKEN    - GitHub token for fetching PR details
-#   JIRA_BASE_URL      - Jira instance URL
-#   JIRA_CLOUD_ID      - Atlassian Cloud ID
-#   JIRA_EMAIL         - Atlassian account email
-#   ATLASSIAN_API_TOKEN - Atlassian API token
-#   ANTHROPIC_MODEL    - Claude model (default: claude-haiku-4-5)
+#   RN_GH_ACCESS_TOKEN    - GitHub token for fetching PR details
+#   RN_JIRA_BASE_URL      - Jira instance URL
+#   RN_JIRA_CLOUD_ID      - Atlassian Cloud ID
+#   RN_JIRA_EMAIL         - Atlassian account email
+#   RN_ATLASSIAN_API_TOKEN - Atlassian API token
+#   RN_ANTHROPIC_MODEL    - Claude model (default: claude-haiku-4-5)
 
-require "json"
-require "net/http"
-require "uri"
-require "base64"
-require "optparse"
-require "set"
-require "time"
-require "open3"
+require 'json'
+require 'net/http'
+require 'uri'
+require 'base64'
+require 'optparse'
+require 'time'
+require 'open3'
 
 class PRReleaseNotesGenerator
   JIRA_PATTERN = /\b([A-Z]+-\d+)\b/
-  GIT_REF_PATTERN = /\A[\w\-\.\/]+\z/
+  GIT_REF_PATTERN = %r{\A[\w\-./]+\z}
 
   def initialize(options = {})
     @pr_number = options[:pr_number]
@@ -37,16 +36,16 @@ class PRReleaseNotesGenerator
     @head_ref = options[:head_ref]
     @verbose = options[:verbose] || false
 
-    @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
-    @anthropic_model = ENV["ANTHROPIC_MODEL"] || "claude-haiku-4-5"
+    @anthropic_api_key = ENV["RN_ANTHROPIC_API_KEY"]
+    @anthropic_model = ENV["RN_ANTHROPIC_MODEL"] || "claude-haiku-4-5"
 
-    @github_token = ENV["GH_ACCESS_TOKEN"]
+    @github_token = ENV["RN_GH_ACCESS_TOKEN"]
     @github_repo = extract_github_repo
 
-    @jira_base_url = ENV["JIRA_BASE_URL"]
-    @jira_cloud_id = ENV["JIRA_CLOUD_ID"]
-    @jira_email = ENV["JIRA_EMAIL"]
-    @atlassian_api_token = ENV["ATLASSIAN_API_TOKEN"]
+    @jira_base_url = ENV["RN_JIRA_BASE_URL"]
+    @jira_cloud_id = ENV["RN_JIRA_CLOUD_ID"]
+    @jira_email = ENV["RN_JIRA_EMAIL"]
+    @atlassian_api_token = ENV["RN_ATLASSIAN_API_TOKEN"]
 
     validate!
   end
@@ -259,7 +258,7 @@ class PRReleaseNotesGenerator
       else
         { key: ticket_id, error: "HTTP #{response.code}" }
       end
-    rescue => e
+    rescue StandardError => e
       { key: ticket_id, error: e.message }
     ensure
       sleep(0.3) if index && index < ticket_ids.length - 1
@@ -389,7 +388,7 @@ class PRReleaseNotesGenerator
       end
       exit(1)
     end
-  rescue => e
+  rescue StandardError => e
     warn("[ERROR] Failed to call Anthropic API: #{e.message}")
     exit(1)
   end

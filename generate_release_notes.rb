@@ -31,14 +31,14 @@ class DeploymentSummaryGenerator
     @compare_ref = options[:compare_ref] || "main"
     @output_dir = options[:output_dir] || "."
     @verbose = options[:verbose] || false
-    @jira_base_url = ENV["JIRA_BASE_URL"]
-    @jira_cloud_id = ENV["JIRA_CLOUD_ID"]
-    @jira_email = ENV["JIRA_EMAIL"]
-    @atlassian_api_token = ENV["ATLASSIAN_API_TOKEN"]
-    @anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
-    @anthropic_model = ENV["ANTHROPIC_MODEL"] || "claude-haiku-4-5"
-    @confluence_base_url = ENV["CONFLUENCE_BASE_URL"]
-    @github_access_token = ENV["GH_ACCESS_TOKEN"]
+    @jira_base_url = ENV["RN_JIRA_BASE_URL"]
+    @jira_cloud_id = ENV["RN_JIRA_CLOUD_ID"]
+    @jira_email = ENV["RN_JIRA_EMAIL"]
+    @atlassian_api_token = ENV["RN_ATLASSIAN_API_TOKEN"]
+    @anthropic_api_key = ENV["RN_ANTHROPIC_API_KEY"]
+    @anthropic_model = ENV["RN_ANTHROPIC_MODEL"] || "claude-haiku-4-5"
+    @confluence_base_url = ENV["RN_CONFLUENCE_BASE_URL"]
+    @github_access_token = ENV["RN_GH_ACCESS_TOKEN"]
     @file_changes_cache = nil
     @github_repo = nil
 
@@ -109,12 +109,12 @@ class DeploymentSummaryGenerator
 
   def validate_environment!
     missing = []
-    missing << "JIRA_BASE_URL" unless @jira_base_url
-    missing << "JIRA_CLOUD_ID" unless @jira_cloud_id
-    missing << "JIRA_EMAIL" unless @jira_email
-    missing << "ATLASSIAN_API_TOKEN" unless @atlassian_api_token
-    missing << "ANTHROPIC_API_KEY" unless @anthropic_api_key
-    missing << "CONFLUENCE_BASE_URL" unless @confluence_base_url
+    missing << "RN_JIRA_BASE_URL" unless @jira_base_url
+    missing << "RN_JIRA_CLOUD_ID" unless @jira_cloud_id
+    missing << "RN_JIRA_EMAIL" unless @jira_email
+    missing << "RN_ATLASSIAN_API_TOKEN" unless @atlassian_api_token
+    missing << "RN_ANTHROPIC_API_KEY" unless @anthropic_api_key
+    missing << "RN_CONFLUENCE_BASE_URL" unless @confluence_base_url
 
     if missing.any?
       error("Missing required environment variables: #{missing.join(", ")}")
@@ -1161,19 +1161,19 @@ def main
     opts.separator("References can be branch names or commit SHAs.")
     opts.separator("")
     opts.separator("Required Environment Variables:")
-    opts.separator("  JIRA_BASE_URL           - Your Jira instance URL (e.g., https://yourcompany.atlassian.net)")
-    opts.separator("  JIRA_CLOUD_ID           - Your Atlassian Cloud ID (required for scoped API tokens)")
-    opts.separator("  JIRA_EMAIL              - Atlassian account email")
-    opts.separator("  ATLASSIAN_API_TOKEN     - Atlassian API token (used for both Jira and Confluence)")
-    opts.separator("  ANTHROPIC_API_KEY       - Anthropic API key for Claude")
-    opts.separator("  CONFLUENCE_BASE_URL     - Confluence instance URL (e.g., https://company.atlassian.net)")
+    opts.separator("  RN_JIRA_BASE_URL           - Your Jira instance URL (e.g., https://yourcompany.atlassian.net)")
+    opts.separator("  RN_JIRA_CLOUD_ID           - Your Atlassian Cloud ID (required for scoped API tokens)")
+    opts.separator("  RN_JIRA_EMAIL              - Atlassian account email")
+    opts.separator("  RN_ATLASSIAN_API_TOKEN     - Atlassian API token (used for both Jira and Confluence)")
+    opts.separator("  RN_ANTHROPIC_API_KEY       - Anthropic API key for Claude")
+    opts.separator("  RN_CONFLUENCE_BASE_URL     - Confluence instance URL (e.g., https://company.atlassian.net)")
     opts.separator("")
     opts.separator("Confluence Configuration:")
     opts.separator("  Prompt configuration is loaded from page ID #{DeploymentSummaryGenerator::PROMPT_CONFIG_PAGE_ID}")
     opts.separator("  Output is published under parent page ID #{DeploymentSummaryGenerator::OUTPUT_PARENT_PAGE_ID}")
     opts.separator("")
     opts.separator("Optional Environment Variables:")
-    opts.separator("  ANTHROPIC_MODEL         - Anthropic model to use (default: claude-haiku-4-5)")
+    opts.separator("  RN_ANTHROPIC_MODEL         - Anthropic model to use (default: claude-haiku-4-5)")
     opts.separator("")
     opts.separator("Options:")
 
