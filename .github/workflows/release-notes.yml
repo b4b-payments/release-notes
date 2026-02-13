@@ -7,8 +7,12 @@
 #
 # Setup required:
 #   1. Add these secrets to the repository:
-#      - ANTHROPIC_API_KEY (required)
-#      - JIRA_BASE_URL, JIRA_CLOUD_ID, JIRA_EMAIL, ATLASSIAN_API_TOKEN (optional, for Jira enrichment)
+#      - RN_ANTHROPIC_API_KEY (required)
+#      - RN_CONFLUENCE_BASE_URL (required)
+#      - RN_ATLASSIAN_API_TOKEN (required)
+#      - RN_JIRA_EMAIL (required)
+#      - RN_JIRA_BASE_URL, RN_JIRA_CLOUD_ID (optional, for Jira enrichment)
+#      - RN_GH_ACCESS_TOKEN (optional, for enriching PR details)
 #   2. Add branch protection rule on main:
 #      - Require status checks to pass: "release-notes-approved"
 #
@@ -71,12 +75,13 @@ jobs:
 
       - name: Generate release notes
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_CLOUD_ID: ${{ secrets.JIRA_CLOUD_ID }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+          RN_ANTHROPIC_API_KEY: ${{ secrets.RN_ANTHROPIC_API_KEY }}
+          RN_CONFLUENCE_BASE_URL: ${{ secrets.RN_CONFLUENCE_BASE_URL }}
+          RN_ATLASSIAN_API_TOKEN: ${{ secrets.RN_ATLASSIAN_API_TOKEN }}
+          RN_JIRA_EMAIL: ${{ secrets.RN_JIRA_EMAIL }}
+          RN_GH_ACCESS_TOKEN: ${{ secrets.RN_GH_ACCESS_TOKEN }}
+          RN_JIRA_BASE_URL: ${{ secrets.RN_JIRA_BASE_URL }}
+          RN_JIRA_CLOUD_ID: ${{ secrets.RN_JIRA_CLOUD_ID }}
         run: |
           ruby generate_pr_release_notes.rb \
             --pr ${{ github.event.issue.number }} \
