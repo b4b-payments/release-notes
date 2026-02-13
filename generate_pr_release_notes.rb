@@ -27,10 +27,11 @@ require "optparse"
 require "time"
 require "open3"
 require "openssl"
-require "dotenv"
 require_relative "confluence_client"
 
-Dotenv.load(".env")
+# uncomment for local testing if required
+#require "dotenv"
+#Dotenv.load(".env")
 
 class PRReleaseNotesGenerator
   JIRA_PATTERN = /\b([A-Z]+-\d+)\b/
