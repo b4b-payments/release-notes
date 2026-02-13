@@ -19,24 +19,24 @@
 #   RN_JIRA_CLOUD_ID           - Atlassian Cloud ID
 #   RN_ANTHROPIC_MODEL         - Claude model (default: claude-haiku-4-5)
 
-require "json"
-require "net/http"
-require "uri"
-require "base64"
-require "optparse"
-require "time"
-require "open3"
-require "openssl"
-require_relative "confluence_client"
+require 'json'
+require 'net/http'
+require 'uri'
+require 'base64'
+require 'optparse'
+require 'time'
+require 'open3'
+require 'openssl'
+require_relative 'confluence_client'
 
 # uncomment for local testing if required
-#require "dotenv"
-#Dotenv.load(".env")
+# require 'dotenv'
+# Dotenv.load('.env')
 
 class PRReleaseNotesGenerator
   JIRA_PATTERN = /\b([A-Z]+-\d+)\b/
   GIT_REF_PATTERN = %r{\A[\w\-./]+\z}
-  PROMPT_CONFIG_PAGE_ID = "3230269452"
+  PROMPT_CONFIG_PAGE_ID = '3230269452'
 
   def initialize(options = {})
     @pr_number = options[:pr_number]
@@ -44,17 +44,17 @@ class PRReleaseNotesGenerator
     @head_ref = options[:head_ref]
     @verbose = options[:verbose] || false
 
-    @anthropic_api_key = ENV["RN_ANTHROPIC_API_KEY"]
-    @anthropic_model = ENV["RN_ANTHROPIC_MODEL"] || "claude-haiku-4-5"
+    @anthropic_api_key = ENV['RN_ANTHROPIC_API_KEY']
+    @anthropic_model = ENV['RN_ANTHROPIC_MODEL'] || 'claude-haiku-4-5'
 
-    @github_token = ENV["RN_GH_ACCESS_TOKEN"]
+    @github_token = ENV['RN_GH_ACCESS_TOKEN']
     @github_repo = extract_github_repo
 
-    @jira_base_url = ENV["RN_JIRA_BASE_URL"]
-    @jira_cloud_id = ENV["RN_JIRA_CLOUD_ID"]
-    @jira_email = ENV["RN_JIRA_EMAIL"]
-    @atlassian_api_token = ENV["RN_ATLASSIAN_API_TOKEN"]
-    @confluence_base_url = ENV["RN_CONFLUENCE_BASE_URL"]
+    @jira_base_url = ENV['RN_JIRA_BASE_URL']
+    @jira_cloud_id = ENV['RN_JIRA_CLOUD_ID']
+    @jira_email = ENV['RN_JIRA_EMAIL']
+    @atlassian_api_token = ENV['RN_ATLASSIAN_API_TOKEN']
+    @confluence_base_url = ENV['RN_CONFLUENCE_BASE_URL']
 
     validate!
     load_confluence_config!
@@ -92,22 +92,18 @@ class PRReleaseNotesGenerator
 
   def validate!
     errors = []
-    errors << "PR number is required (--pr)" unless @pr_number
-    errors << "PR number must be a positive integer" if @pr_number && @pr_number <= 0
-    errors << "Base ref is required (--base)" unless @base_ref
-    errors << "Head ref is required (--head)" unless @head_ref
-    errors << "RN_ANTHROPIC_API_KEY environment variable is required" unless @anthropic_api_key
-    errors << "RN_CONFLUENCE_BASE_URL environment variable is required" unless @confluence_base_url
-    errors << "RN_ATLASSIAN_API_TOKEN environment variable is required" unless @atlassian_api_token
-    errors << "RN_JIRA_EMAIL environment variable is required" unless @jira_email
+    errors << 'PR number is required (--pr)' unless @pr_number
+    errors << 'PR number must be a positive integer' if @pr_number && @pr_number <= 0
+    errors << 'Base ref is required (--base)' unless @base_ref
+    errors << 'Head ref is required (--head)' unless @head_ref
+    errors << 'RN_ANTHROPIC_API_KEY environment variable is required' unless @anthropic_api_key
+    errors << 'RN_CONFLUENCE_BASE_URL environment variable is required' unless @confluence_base_url
+    errors << 'RN_ATLASSIAN_API_TOKEN environment variable is required' unless @atlassian_api_token
+    errors << 'RN_JIRA_EMAIL environment variable is required' unless @jira_email
 
-    if @base_ref && !@base_ref.match?(GIT_REF_PATTERN)
-      errors << "Base ref contains invalid characters: #{@base_ref}"
-    end
+    errors << "Base ref contains invalid characters: #{@base_ref}" if @base_ref && !@base_ref.match?(GIT_REF_PATTERN)
 
-    if @head_ref && !@head_ref.match?(GIT_REF_PATTERN)
-      errors << "Head ref contains invalid characters: #{@head_ref}"
-    end
+    errors << "Head ref contains invalid characters: #{@head_ref}" if @head_ref && !@head_ref.match?(GIT_REF_PATTERN)
 
     return unless errors.any?
 
@@ -116,7 +112,7 @@ class PRReleaseNotesGenerator
   end
 
   def load_confluence_config!
-    log("Loading prompt configuration from Confluence...")
+    log('Loading prompt configuration from Confluence...')
 
     @confluence_client = ConfluenceClient.new(
       base_url: @confluence_base_url,
@@ -125,19 +121,19 @@ class PRReleaseNotesGenerator
     )
 
     @confluence_config = @confluence_client.fetch_config_from_page(PROMPT_CONFIG_PAGE_ID, format: :yaml)
-    log("  Successfully loaded Confluence config with #{@confluence_config["sections"]&.length || 0} sections")
+    log("  Successfully loaded Confluence config with #{@confluence_config['sections']&.length || 0} sections")
   rescue StandardError => e
     warn("[ERROR] Failed to load Confluence configuration: #{e.message}")
     exit(1)
   end
 
   def extract_github_repo
-    remote_url = git("config", "--get", "remote.origin.url")
+    remote_url = git('config', '--get', 'remote.origin.url')
     match = remote_url.match(%r{(?:git@github\.com:|https://github\.com/)([^/]+)/(.+?)(?:\.git)?$})
 
     return unless match
 
-    { owner: match[1], repo: match[2].sub(/\.git$/, "") }
+    { owner: match[1], repo: match[2].sub(/\.git$/, '') }
   end
 
   def fetch_pr_details
@@ -147,23 +143,23 @@ class PRReleaseNotesGenerator
 
     uri = URI("https://api.github.com/repos/#{@github_repo[:owner]}/#{@github_repo[:repo]}/pulls/#{@pr_number}")
     request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "Bearer #{@github_token}"
-    request["Accept"] = "application/vnd.github+json"
-    request["X-GitHub-Api-Version"] = "2022-11-28"
+    request['Authorization'] = "Bearer #{@github_token}"
+    request['Accept'] = 'application/vnd.github+json'
+    request['X-GitHub-Api-Version'] = '2022-11-28'
 
     response = make_https_request(uri, request)
 
-    if response.code == "200"
+    if response.code == '200'
       data = JSON.parse(response.body)
       {
-        number: data["number"],
-        title: data["title"],
-        description: data["body"],
-        author: data["user"]["login"],
-        branch: data["head"]["ref"],
-        base_branch: data["base"]["ref"],
-        url: data["html_url"],
-        labels: data["labels"]&.map { |l| l["name"] } || []
+        number: data['number'],
+        title: data['title'],
+        description: data['body'],
+        author: data['user']['login'],
+        branch: data['head']['ref'],
+        base_branch: data['base']['ref'],
+        url: data['html_url'],
+        labels: data['labels']&.map { |l| l['name'] } || []
       }
     else
       log("Warning: Could not fetch PR details: #{response.code}")
@@ -175,15 +171,15 @@ class PRReleaseNotesGenerator
   end
 
   def extract_commits
-    merge_base = git("merge-base", @base_ref, @head_ref, allow_failure: true)
+    merge_base = git('merge-base', @base_ref, @head_ref, allow_failure: true)
 
     if merge_base.empty?
       warn("[ERROR] Could not find merge base between #{@base_ref} and #{@head_ref}")
       exit(1)
     end
 
-    output = git("log", "#{merge_base}..#{@head_ref}",
-      "--pretty=format:%H|%an|%ae|%ad|%s|||%b|||", "--date=iso")
+    output = git('log', "#{merge_base}..#{@head_ref}",
+                 '--pretty=format:%H|%an|%ae|%ad|%s|||%b|||', '--date=iso')
 
     commits = []
     output.split("|||\n").each do |block|
@@ -193,8 +189,8 @@ class PRReleaseNotesGenerator
       first_line = lines.first
       body_lines = lines[1..] || []
 
-      hash, author, email, date, subject = first_line.split("|", 5)
-      body = body_lines.join("\n").gsub("|||", "").strip
+      hash, author, email, date, subject = first_line.split('|', 5)
+      body = body_lines.join("\n").gsub('|||', '').strip
 
       commits << {
         hash: hash,
@@ -203,7 +199,7 @@ class PRReleaseNotesGenerator
         email: email,
         date: date,
         subject: subject,
-        body: body,
+        body: body
       }
     end
 
@@ -211,23 +207,23 @@ class PRReleaseNotesGenerator
   end
 
   def extract_file_changes
-    merge_base = git("merge-base", @base_ref, @head_ref)
-    stats = git("diff", "--stat", "#{merge_base}..#{@head_ref}")
-    changed_files = git("diff", "--name-only", "#{merge_base}..#{@head_ref}").split("\n").reject(&:empty?)
+    merge_base = git('merge-base', @base_ref, @head_ref)
+    stats = git('diff', '--stat', "#{merge_base}..#{@head_ref}")
+    changed_files = git('diff', '--name-only', "#{merge_base}..#{@head_ref}").split("\n").reject(&:empty?)
 
     categorized = {}
     changed_files.each do |file|
       category = case file
-      when %r{^db/migrate/} then :migrations
-      when %r{^app/models/} then :models
-      when %r{^app/controllers/} then :controllers
-      when %r{^app/services/} then :services
-      when %r{^config/} then :config
-      when %r{^(test|spec)/} then :tests
-      when %r{^app/views/} then :views
-      when %r{^lib/} then :libs
-      else :other
-      end
+                 when %r{^db/migrate/} then :migrations
+                 when %r{^app/models/} then :models
+                 when %r{^app/controllers/} then :controllers
+                 when %r{^app/services/} then :services
+                 when %r{^config/} then :config
+                 when %r{^(test|spec)/} then :tests
+                 when %r{^app/views/} then :views
+                 when %r{^lib/} then :libs
+                 else :other
+                 end
       (categorized[category] ||= []) << file
     end
 
@@ -235,7 +231,7 @@ class PRReleaseNotesGenerator
       stats: stats,
       total_files: changed_files.length,
       changed_files: changed_files,
-      categorized: categorized,
+      categorized: categorized
     }
   end
 
@@ -248,8 +244,9 @@ class PRReleaseNotesGenerator
     end
 
     if pr_details
-      [:title, :description, :branch].each do |field|
+      %i[title description branch].each do |field|
         next unless (text = pr_details[field])
+
         tickets.merge(text.upcase.scan(JIRA_PATTERN).flatten)
       end
     end
@@ -270,19 +267,20 @@ class PRReleaseNotesGenerator
     ticket_ids.map.with_index do |ticket_id, index|
       uri = URI("https://api.atlassian.com/ex/jira/#{@jira_cloud_id}/rest/api/3/issue/#{ticket_id}")
       request = Net::HTTP::Get.new(uri)
-      request["Authorization"] = "Basic #{auth}"
-      request["Accept"] = "application/json"
+      request['Authorization'] = "Basic #{auth}"
+      request['Accept'] = 'application/json'
 
       response = make_https_request(uri, request)
 
-      if response.code == "200"
+      if response.code == '200'
         data = JSON.parse(response.body)
         {
           key: ticket_id,
-          summary: data.dig("fields", "summary"),
-          type: data.dig("fields", "issuetype", "name"),
-          status: data.dig("fields", "status", "name"),
-          priority: data.dig("fields", "priority", "name"),
+          summary: data.dig('fields', 'summary'),
+          type: data.dig('fields', 'issuetype', 'name'),
+          status: data.dig('fields', 'status', 'name'),
+          priority: data.dig('fields', 'priority', 'name'),
+          description: data.dig('fields', 'description')
         }
       else
         { key: ticket_id, error: "HTTP #{response.code}" }
@@ -298,20 +296,20 @@ class PRReleaseNotesGenerator
     {
       metadata: {
         pr_number: @pr_number,
-        pr_title: pr_details&.[](:title) || "N/A",
-        pr_author: pr_details&.[](:author) || "N/A",
+        pr_title: pr_details&.[](:title) || 'N/A',
+        pr_author: pr_details&.[](:author) || 'N/A',
         pr_branch: pr_details&.[](:branch) || @head_ref,
         base_branch: pr_details&.[](:base_branch) || @base_ref,
         commit_count: commits.length,
         jira_ticket_count: jira_ticket_ids.length,
         files_changed: file_changes[:total_files],
-        generated_at: Time.now.iso8601,
+        generated_at: Time.now.iso8601
       },
       pr_details: pr_details || {},
       commits: commits,
       file_changes: file_changes,
       jira_ticket_ids: jira_ticket_ids,
-      jira_details: jira_details,
+      jira_details: jira_details
     }
   end
 
@@ -331,7 +329,7 @@ class PRReleaseNotesGenerator
 
       ## PR Description
 
-      #{context[:pr_details]&.[](:description) || "No description provided."}
+      #{context[:pr_details]&.[](:description) || 'No description provided.'}
 
       ## Commits
 
@@ -354,31 +352,37 @@ class PRReleaseNotesGenerator
   end
 
   def format_commits_for_prompt(commits)
-    return "No commits found in this PR." if commits.empty?
+    return 'No commits found in this PR.' if commits.empty?
 
     commits.map do |c|
-      body_preview = c[:body].empty? ? "" : "\n  #{c[:body].lines.first&.strip}"
+      body_preview = c[:body].empty? ? '' : "\n  #{c[:body].lines.first&.strip}"
       "- `#{c[:short_hash]}` **#{c[:subject]}**#{body_preview}\n  _#{c[:author]} (#{c[:date]})_"
     end.join("\n\n")
   end
 
   def format_jira_for_prompt(jira_details)
-    return "No Jira tickets referenced in this PR." if jira_details.empty?
+    return 'No Jira tickets referenced in this PR.' if jira_details.empty?
 
     jira_details.map do |ticket|
       if ticket[:error]
         "- **#{ticket[:key]}**: [!] Could not fetch details (#{ticket[:error]})"
       else
+        description_section = if ticket[:description].nil? || ticket[:description].empty?
+                                ''
+                              else
+                                "\n    Description: #{ticket[:description]}"
+                              end
+
         <<~TICKET.strip
           - **#{ticket[:key]}**: #{ticket[:summary]}
-            - Type: #{ticket[:type]} | Status: #{ticket[:status]} | Priority: #{ticket[:priority]}
+            - Type: #{ticket[:type]} | Status: #{ticket[:status]} | Priority: #{ticket[:priority]}#{description_section}
         TICKET
       end
     end.join("\n\n")
   end
 
   def format_file_categories(categorized)
-    return "No files changed." if categorized.empty?
+    return 'No files changed.' if categorized.empty?
 
     categorized.map do |category, files|
       "**#{category}** (#{files.length}):\n#{files.map { |f| "  - #{f}" }.join("\n")}"
@@ -386,7 +390,7 @@ class PRReleaseNotesGenerator
   end
 
   def format_jira_context(ticket_ids, jira_details)
-    return "No Jira tickets referenced." if ticket_ids.empty?
+    return 'No Jira tickets referenced.' if ticket_ids.empty?
 
     if jira_details.any?
       jira_details.map do |t|
@@ -402,19 +406,18 @@ class PRReleaseNotesGenerator
   end
 
   def generate_release_notes(context)
-    # Get the first section from Confluence config as the template
-    sections = @confluence_config["sections"] || []
+    sections = @confluence_config['sections'] || []
 
     if sections.empty?
-      warn("[ERROR] No sections found in Confluence configuration")
+      warn('[ERROR] No sections found in Confluence configuration')
       exit(1)
     end
 
-    prompt_template = sections.first["prompt"]
-    max_tokens = sections.first["max_tokens"] || 2000
+    prompt_template = sections.first['prompt']
+    max_tokens = sections.first['max_tokens'] || 2000
 
     unless prompt_template
-      warn("[ERROR] First section in Confluence config is missing prompt template")
+      warn('[ERROR] First section in Confluence config is missing prompt template')
       exit(1)
     end
 
@@ -423,18 +426,15 @@ class PRReleaseNotesGenerator
   end
 
   def build_prompt_from_template(template, context)
-    # Build comprehensive context to include with the prompt
     full_context = build_pr_context_string(context)
 
-    # Template gets full context prepended, then any variable substitutions
     prompt = full_context + "\n\n" + template
 
-    # Replace common placeholders
-    prompt.gsub!("{{commit_count}}", context[:metadata][:commit_count].to_s)
-    prompt.gsub!("{{jira_count}}", context[:metadata][:jira_ticket_count].to_s)
-    prompt.gsub!("{{pr_number}}", context[:metadata][:pr_number].to_s)
-    prompt.gsub!("{{pr_title}}", context[:metadata][:pr_title])
-    prompt.gsub!("{{files_changed}}", context[:metadata][:files_changed].to_s)
+    prompt.gsub!('{{commit_count}}', context[:metadata][:commit_count].to_s)
+    prompt.gsub!('{{jira_count}}', context[:metadata][:jira_ticket_count].to_s)
+    prompt.gsub!('{{pr_number}}', context[:metadata][:pr_number].to_s)
+    prompt.gsub!('{{pr_title}}', context[:metadata][:pr_title])
+    prompt.gsub!('{{files_changed}}', context[:metadata][:files_changed].to_s)
 
     prompt
   end
@@ -442,30 +442,30 @@ class PRReleaseNotesGenerator
   def call_llm(prompt, max_tokens = 1000)
     log("Calling Anthropic API (#{@anthropic_model})...")
 
-    uri = URI("https://api.anthropic.com/v1/messages")
+    uri = URI('https://api.anthropic.com/v1/messages')
     request = Net::HTTP::Post.new(uri)
-    request["Content-Type"] = "application/json"
-    request["x-api-key"] = @anthropic_api_key
-    request["anthropic-version"] = "2023-06-01"
+    request['Content-Type'] = 'application/json'
+    request['x-api-key'] = @anthropic_api_key
+    request['anthropic-version'] = '2023-06-01'
 
     request.body = {
       model: @anthropic_model,
       max_tokens: max_tokens,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: 'user', content: prompt }]
     }.to_json
 
     response = make_https_request(uri, request, read_timeout: 120)
 
-    if response.code == "200"
+    if response.code == '200'
       result = JSON.parse(response.body)
-      result["content"][0]["text"]
+      result['content'][0]['text']
     else
       warn("[ERROR] Anthropic API error: #{response.code}")
       begin
         error_data = JSON.parse(response.body)
-        warn("[ERROR] #{error_data.dig("error", "type")}: #{error_data.dig("error", "message")}")
+        warn("[ERROR] #{error_data.dig('error', 'type')}: #{error_data.dig('error', 'message')}")
       rescue JSON::ParserError
-        warn("[ERROR] Could not parse error response")
+        warn('[ERROR] Could not parse error response')
       end
       exit(1)
     end
@@ -487,13 +487,13 @@ class PRReleaseNotesGenerator
     MD
   end
 
-  def output_release_notes(notes, pr_details, commits, jira_ticket_ids)
-    head_sha = git("rev-parse", @head_ref)[0..7]
+  def output_release_notes(notes, pr_details, commits, _jira_ticket_ids)
+    head_sha = git('rev-parse', @head_ref)[0..7]
 
     puts <<~MD
       ## Release Notes
 
-      > PR ##{@pr_number} | `#{head_sha}` | #{commits.length} commit(s) | #{pr_details&.[](:author) || "unknown"}
+      > PR ##{@pr_number} | `#{head_sha}` | #{commits.length} commit(s) | #{pr_details&.[](:author) || 'unknown'}
 
       #{notes}
 
@@ -502,12 +502,11 @@ class PRReleaseNotesGenerator
     MD
   end
 
-  # Executes a git command safely using Open3 (no shell interpolation).
   def git(*args, allow_failure: false)
-    stdout, stderr, status = Open3.capture3("git", *args)
+    stdout, stderr, status = Open3.capture3('git', *args)
 
     unless status.success? || allow_failure
-      warn("[ERROR] git #{args.join(" ")} failed (exit #{status.exitstatus})")
+      warn("[ERROR] git #{args.join(' ')} failed (exit #{status.exitstatus})")
       warn("[ERROR] #{stderr.strip}") unless stderr.strip.empty?
       exit(1)
     end
@@ -528,23 +527,21 @@ class PRReleaseNotesGenerator
   end
 end
 
-# --- Main ---
-
 options = {}
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{File.basename($0)} [options]"
-  opts.separator ""
-  opts.separator "Generate release notes for a pull request."
-  opts.separator ""
-  opts.separator "Required:"
-  opts.on("--pr NUMBER", Integer, "Pull request number") { |n| options[:pr_number] = n }
-  opts.on("--base REF", "Base git reference (e.g., origin/main)") { |r| options[:base_ref] = r }
-  opts.on("--head REF", "Head git reference (e.g., pr_head)") { |r| options[:head_ref] = r }
-  opts.separator ""
-  opts.separator "Optional:"
-  opts.on("-v", "--verbose", "Verbose output to stderr") { options[:verbose] = true }
-  opts.on("-h", "--help", "Show help") do
+  opts.separator ''
+  opts.separator 'Generate release notes for a pull request.'
+  opts.separator ''
+  opts.separator 'Required:'
+  opts.on('--pr NUMBER', Integer, 'Pull request number') { |n| options[:pr_number] = n }
+  opts.on('--base REF', 'Base git reference (e.g., origin/main)') { |r| options[:base_ref] = r }
+  opts.on('--head REF', 'Head git reference (e.g., pr_head)') { |r| options[:head_ref] = r }
+  opts.separator ''
+  opts.separator 'Optional:'
+  opts.on('-v', '--verbose', 'Verbose output to stderr') { options[:verbose] = true }
+  opts.on('-h', '--help', 'Show help') do
     puts opts
     exit
   end
