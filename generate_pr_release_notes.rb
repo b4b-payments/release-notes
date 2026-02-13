@@ -19,14 +19,18 @@
 #   RN_JIRA_CLOUD_ID           - Atlassian Cloud ID
 #   RN_ANTHROPIC_MODEL         - Claude model (default: claude-haiku-4-5)
 
-require 'json'
-require 'net/http'
-require 'uri'
-require 'base64'
-require 'optparse'
-require 'time'
-require 'open3'
+require "json"
+require "net/http"
+require "uri"
+require "base64"
+require "optparse"
+require "time"
+require "open3"
+require "openssl"
+require "dotenv"
 require_relative "confluence_client"
+
+Dotenv.load(".env")
 
 class PRReleaseNotesGenerator
   JIRA_PATTERN = /\b([A-Z]+-\d+)\b/
@@ -104,10 +108,10 @@ class PRReleaseNotesGenerator
       errors << "Head ref contains invalid characters: #{@head_ref}"
     end
 
-    if errors.any?
-      errors.each { |e| warn("[ERROR] #{e}") }
-      exit(1)
-    end
+    return unless errors.any?
+
+    errors.each { |e| warn("[ERROR] #{e}") }
+    exit(1)
   end
 
   def load_confluence_config!
@@ -121,7 +125,7 @@ class PRReleaseNotesGenerator
 
     @confluence_config = @confluence_client.fetch_config_from_page(PROMPT_CONFIG_PAGE_ID, format: :yaml)
     log("  Successfully loaded Confluence config with #{@confluence_config["sections"]&.length || 0} sections")
-  rescue => e
+  rescue StandardError => e
     warn("[ERROR] Failed to load Confluence configuration: #{e.message}")
     exit(1)
   end
@@ -130,9 +134,9 @@ class PRReleaseNotesGenerator
     remote_url = git("config", "--get", "remote.origin.url")
     match = remote_url.match(%r{(?:git@github\.com:|https://github\.com/)([^/]+)/(.+?)(?:\.git)?$})
 
-    if match
-      { owner: match[1], repo: match[2].sub(/\.git$/, "") }
-    end
+    return unless match
+
+    { owner: match[1], repo: match[2].sub(/\.git$/, "") }
   end
 
   def fetch_pr_details
@@ -158,13 +162,13 @@ class PRReleaseNotesGenerator
         branch: data["head"]["ref"],
         base_branch: data["base"]["ref"],
         url: data["html_url"],
-        labels: data["labels"]&.map { |l| l["name"] } || [],
+        labels: data["labels"]&.map { |l| l["name"] } || []
       }
     else
       log("Warning: Could not fetch PR details: #{response.code}")
       nil
     end
-  rescue => e
+  rescue StandardError => e
     log("Warning: Error fetching PR details: #{e.message}")
     nil
   end
@@ -349,9 +353,7 @@ class PRReleaseNotesGenerator
   end
 
   def format_commits_for_prompt(commits)
-    if commits.empty?
-      return "No commits found in this PR."
-    end
+    return "No commits found in this PR." if commits.empty?
 
     commits.map do |c|
       body_preview = c[:body].empty? ? "" : "\n  #{c[:body].lines.first&.strip}"
@@ -360,9 +362,7 @@ class PRReleaseNotesGenerator
   end
 
   def format_jira_for_prompt(jira_details)
-    if jira_details.empty?
-      return "No Jira tickets referenced in this PR."
-    end
+    return "No Jira tickets referenced in this PR." if jira_details.empty?
 
     jira_details.map do |ticket|
       if ticket[:error]
@@ -517,6 +517,7 @@ class PRReleaseNotesGenerator
   def make_https_request(uri, request, read_timeout: 30)
     http = Net::HTTP.new(uri.hostname, uri.port)
     http.use_ssl = true
+    http.verify_mode = OpenSSL::SSL::VERIFY_NONE
     http.read_timeout = read_timeout
     http.request(request)
   end
@@ -542,7 +543,10 @@ parser = OptionParser.new do |opts|
   opts.separator ""
   opts.separator "Optional:"
   opts.on("-v", "--verbose", "Verbose output to stderr") { options[:verbose] = true }
-  opts.on("-h", "--help", "Show help") { puts opts; exit }
+  opts.on("-h", "--help", "Show help") do
+    puts opts
+    exit
+  end
 end
 
 begin
