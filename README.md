@@ -6,7 +6,7 @@ Automated release notes generation tooling for PCS Core.
 
 ### `generate_pr_release_notes.rb`
 
-Generates release notes for a single pull request. Designed to run in GitHub Actions CI with no external gem dependencies (Ruby stdlib only).
+Generates release notes for a single pull request. Loads prompt templates from Confluence for consistent formatting across PR and deployment release notes. Designed to run in GitHub Actions CI with no external gem dependencies (Ruby stdlib only).
 
 Used by the GitHub Actions workflow in `pcs_core` to generate, approve, and gate merging of PRs based on reviewed release notes.
 
@@ -46,29 +46,34 @@ Helper class for Confluence API interactions. Used by `generate_release_notes.rb
 
 ## Environment Variables
 
+All environment variables use the `RN_` prefix to avoid conflicts with other tools.
+
 ### Required (PR release notes)
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM |
+| `RN_ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM |
+| `RN_CONFLUENCE_BASE_URL` | Confluence instance URL (for loading prompt templates) |
+| `RN_ATLASSIAN_API_TOKEN` | Atlassian API token (for Confluence) |
+| `RN_JIRA_EMAIL` | Atlassian account email |
 
 ### Required (deployment release notes)
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM |
-| `JIRA_BASE_URL` | Jira instance URL (e.g., `https://yourcompany.atlassian.net`) |
-| `JIRA_CLOUD_ID` | Atlassian Cloud ID |
-| `JIRA_EMAIL` | Atlassian account email |
-| `ATLASSIAN_API_TOKEN` | Atlassian API token (Jira and Confluence) |
-| `CONFLUENCE_BASE_URL` | Confluence instance URL |
+| `RN_ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM |
+| `RN_JIRA_BASE_URL` | Jira instance URL (e.g., `https://yourcompany.atlassian.net`) |
+| `RN_JIRA_CLOUD_ID` | Atlassian Cloud ID |
+| `RN_JIRA_EMAIL` | Atlassian account email |
+| `RN_ATLASSIAN_API_TOKEN` | Atlassian API token (Jira and Confluence) |
+| `RN_CONFLUENCE_BASE_URL` | Confluence instance URL |
 
 ### Optional
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GH_ACCESS_TOKEN` | GitHub token for fetching PR details | — |
-| `ANTHROPIC_MODEL` | Claude model to use | `claude-haiku-4-5` |
+| `RN_GH_ACCESS_TOKEN` | GitHub token for fetching PR details | — |
+| `RN_ANTHROPIC_MODEL` | Claude model to use | `claude-haiku-4-5` |
 
 ## GitHub Actions Integration
 
